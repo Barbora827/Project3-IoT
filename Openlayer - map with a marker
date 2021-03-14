@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.3.1/css/ol.css" type="text/css">
+    <style>
+      .map {
+        height: 400px;
+        width: 100%;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.3.1/build/ol.js"></script>
+    <title>Project 3 - map example</title>
+  </head>
+  <body>
+    <h2 style="font-size: 150%; text-align: center;">Project 3 - position of devices</h2>
+    <div id="map" class="map"></div>
+    <div id="popup" class="ol-popup">
+     <a href="#" id="popup-closer" class="ol-popup-closer"></a>
+     <div id="popup-content"></div>
+    </div>
+    <script type="text/javascript">
+      var map = new ol.Map({
+        target: 'map',
+        layers: [
+          new ol.layer.Tile({
+            source: new ol.source.OSM()
+          })
+        ],
+        view: new ol.View({
+          center: ol.proj.fromLonLat([10.203921,56.162939]),
+          zoom: 12
+        })
+      });
+      var layer = new ol.layer.Vector({
+          source: new ol.source.Vector({
+          features: [
+             new ol.Feature({
+                geometry: new ol.geom.Point(ol.proj.fromLonLat([10.203921,56.162936]))
+             })
+         ]
+     })
+ });
+      map.addLayer(layer);
+      var markers = new ol.layer.Vector({
+      source: new ol.source.Vector(),
+      style: new ol.style.Style({
+      image: new ol.style.Icon({
+        anchor: [0.5, 1],
+        src: 'marker2.png'
+    })
+  })
+});
+      map.addLayer(markers);
+      var marker = new ol.Feature(new ol.geom.Point(ol.proj.fromLonLat([10.203921,56.162936])));
+      markers.getSource().addFeature(marker);
+
+      var container = document.getElementById('popup');
+      var content = document.getElementById('popup-content');
+      var closer = document.getElementById('popup-closer');
+
+      var overlay = new ol.Overlay({
+      element: container,
+      autoPan: true,
+      autoPanAnimation: {
+           duration: 250
+      }
+ });
+      map.addOverlay(overlay);
+
+      closer.onclick = function() {
+        overlay.setPosition(undefined);
+        closer.blur();
+        return false;
+ };
+     map.on('singleclick', function (event) {
+      if (map.hasFeatureAtPixel(event.pixel) === true) {
+         var coordinate = event.coordinate;
+
+         content.innerHTML = '<b>Student 1</b><br/>Prototype 1';
+         overlay.setPosition(ol.proj.fromLonLat([10.203921,56.162936]));
+         overlay.setPosition(coordinate);
+     }else {
+         overlay.setPosition(undefined);
+         closer.blur();
+     }
+ });
+map.addLayer(layer);
+    </script>
+  </body>
+</html>

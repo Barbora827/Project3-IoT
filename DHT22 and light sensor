@@ -1,0 +1,91 @@
+#include <DHT.h>
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+
+#define DHTPIN 4
+#define DHTTYPE DHT22
+
+DHT dht(DHTPIN, DHTTYPE);
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+const char* ssid = "";
+const char* password = "";
+const char* mqtt_server = "test.mosquitto.org";
+char msg_humidity[50];
+char msg_temperature[50];
+char msg_light[50];
+float h;
+float t;
+
+void setup_wifi(){
+  delay(10);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED){
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void reconnect(){
+  while (!client.connected()){
+    if (!client.connect("SW")){
+      Serial.print("Failed, rc=");
+      Serial.print(client.state());
+      delay(5000);
+    }
+  }
+}
+
+void setup(){
+  Serial.begin(9600);
+  dht.begin();
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  pinMode(A0, INPUT);
+  while (!Serial){}
+  Serial.println("Device booted up");
+  Serial.println("================");
+}
+
+int timeSinceLastRead = 0;
+
+void loop(){
+  if (!client.connected()){
+    reconnect();
+  }
+  h = dht.readHumidity();
+  t = dht.readTemperature();
+  if (isnan(h) || isnan(t)){
+    Serial.println("Failed to read from DHT sensor");
+    timeSinceLastRead = 0;
+    return;
+  }
+  float hic = dht.computeHeatIndex(t, h, false);
+  int sensorValue = analogRead(A0);
+  float voltage = sensorValue * (5.0/1023.0);
+
+  Serial.print("Humidity: ");
+  Serial.print(h);
+  Serial.print(" %\t");
+  Serial.print("Temperature: ");
+  Serial.print(t);
+  Serial.print(" *C ");
+  Serial.print("Heat index: ");
+  Serial.print(hic);
+  Serial.println(" *C ");
+  Serial.print("From the light sensor: ");
+  Serial.println(voltage);
+
+  timeSinceLastRead=0;
+  client.loop();
+  delay(5000);
+  snprintf(msg_temperature, 50, "%f", t);
+  snprintf(msg_humidity, 50, "%f", h);
+  snprintf(msg_light, 50, "%f", voltage);
+  client.publish("SW/temp", msg_temperature);
+  client.publish("SW/humi", msg_humidity);
+  client.publish("SW/ligh", msg_light);
+}

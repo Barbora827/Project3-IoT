@@ -1,0 +1,352 @@
+#include <DHT.h>
+#include <ESP8266WiFi.h>
+#include <PubSubClient.h>
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+#include <EEPROM.h>
+
+#define DHTPIN 4 //changed this one
+#define DHTTYPE DHT22
+
+DHT dht(DHTPIN, DHTTYPE);
+WiFiClient espClient;
+PubSubClient client(espClient);
+SoftwareSerial ss(4, 5);
+
+TinyGPSPlus gps;
+
+//==============================================//
+const char* ssid = "";
+const char* password = "";
+const char* mqtt_server = "test.mosquitto.org";
+//==============================================//
+char msg_humidity[50];
+char msg_temperature[50];
+char msg_light[50];
+char msg_location_lat[50];
+char msg_location_lng[50];
+char msg_date_yea[50];
+char msg_date_day[50];
+char msg_date_mon[50];
+char msg_time_hou[50];
+char msg_time_min[50];
+char msg_time_sec[50];
+char saved_h[50];
+char saved_t[50];
+char saved_l[50];
+char saved_lat[50];
+char saved_lng[50];
+char saved_yea[50];
+char saved_mon[50];
+char saved_day[50];
+char saved_hou[50];
+char saved_min[50];
+char saved_sec[50];
+//===============================================//
+float h;
+float t;
+float loc_lat;
+float loc_lng;
+float date_yea;
+float date_mon;
+float date_day;
+float time_hou;
+float time_min;
+float time_sec;
+float saved_hum;
+float saved_tem;
+float saved_li;
+float saved_loc_lat;
+float saved_loc_lng;
+float saved_date_yea;
+float saved_date_mon;
+float saved_date_day;
+float saved_time_hou;
+float saved_time_min;
+float saved_time_sec;
+//==============================================//
+int timeSinceLastRead = 0;
+int connect_timer; //line added for the EEPROM
+int save_in; // line added for the EEPROM
+int mqtt_counter; // line added for the EEPROM
+int sensorValue = analogRead(A0);
+int connection_set;
+int no_wifi;
+//=============================================//
+static const uint32_t GPSBaud = 9600;
+//============================================//
+float voltage = sensorValue * (5.0/1023.0);
+//============================================//
+void setup_wifi(){
+  delay(10);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED){
+    delay(500);
+    Serial.print(".");
+    connect_timer += 1;
+    if (connect_timer == 50){
+      Serial.println("Cannot connect to the WiFi");
+      Serial.println("Working in the offline mode");
+      no_wifi = 1;
+      return;
+    }
+  }
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  connection_set = 1;
+}
+
+void reconnect(){
+  while (!client.connected()){
+    mqtt_counter += 1;
+    if (mqtt_counter == 5){
+      Serial.println("No WiFi connection or no connection with MQTT");
+      connect_timer = 50;
+      return;
+    }
+    if (!client.connect("SW")){
+      Serial.print("Failed, rc=");
+      Serial.print(client.state());
+      delay(500);
+    }
+  }
+  if (client.connected()){
+    connection_set = 1;
+  }
+}
+
+void displayInfo()
+{
+  Serial.print(F("Location: ")); 
+  if (gps.location.isValid())
+  {
+    Serial.print(gps.location.lat(), 6);
+    Serial.print(F(","));
+    Serial.print(gps.location.lng(), 6);
+    loc_lat = gps.location.lat(); 
+    loc_lng = gps.location.lng(); 
+  }
+  else
+  {
+    Serial.print(F("INVALID"));
+  }
+  Serial.print(F("  Date/Time: "));
+  if (gps.date.isValid())
+  {
+    Serial.print(gps.date.month());
+    Serial.print(F("/"));
+    Serial.print(gps.date.day());
+    Serial.print(F("/"));
+    Serial.print(gps.date.year());
+    date_yea = gps.date.year(); 
+    date_mon = gps.date.month();
+    date_day = gps.date.day();
+  }
+  else
+  {
+    Serial.print(F("INVALID"));
+  }
+  Serial.print(F(" "));
+  if (gps.time.isValid())
+  {
+    if (gps.time.hour() < 10) Serial.print(F("0"));
+    Serial.print(gps.time.hour());
+    Serial.print(F(":"));
+    if (gps.time.minute() < 10) Serial.print(F("0"));
+    Serial.print(gps.time.minute());
+    Serial.print(F(":"));
+    if (gps.time.second() < 10) Serial.print(F("0"));
+    Serial.print(gps.time.second());
+    Serial.print(F("."));
+    if (gps.time.centisecond() < 10) Serial.print(F("0"));
+    time_hou = gps.time.hour(); 
+    time_min = gps.time.minute(); 
+    time_sec = gps.time.second(); 
+  }
+  else
+  {
+    Serial.print(F("INVALID"));
+  }
+  Serial.println();
+}
+
+void send_stored_data(){
+  saved_hum = EEPROM.read(0);
+  saved_tem = EEPROM.read(1);
+  saved_li = EEPROM.read(2);
+  saved_loc_lat= EEPROM.read(3);
+  saved_loc_lng = EEPROM.read(4);
+  saved_date_yea = EEPROM.read(5);
+  saved_date_mon = EEPROM.read(6);
+  saved_date_day = EEPROM.read(7);
+  saved_time_hou = EEPROM.read(8);
+  saved_time_min = EEPROM.read(9);
+  saved_time_sec = EEPROM.read(10);
+
+  snprintf(saved_h, 50, "%f", saved_hum);
+  snprintf(saved_t, 50, "%f", saved_tem);
+  snprintf(saved_l, 50, "%f", saved_li);
+  snprintf(saved_lat, 50, "%f", saved_loc_lat);
+  snprintf(saved_lng, 50, "%f", saved_loc_lng);
+  snprintf(saved_yea, 50, "%f", saved_date_yea);
+  snprintf(saved_mon, 50, "%f", saved_date_mon);
+  snprintf(saved_day, 50, "%f", saved_date_day);
+  snprintf(saved_hou, 50, "%f", saved_time_hou);
+  snprintf(saved_min, 50, "%f", saved_time_min);
+  snprintf(saved_sec, 50, "%f", saved_time_sec);
+  
+  client.publish("SW/temp", saved_t);
+  client.publish("SW/humi", saved_h);
+  client.publish("SW/ligh", saved_l);
+  client.publish("SW/location/lat", saved_lat); 
+  client.publish("SW/location/lng", saved_lng); 
+  client.publish("SW/date/year", saved_yea); 
+  client.publish("SW/date/month", saved_mon);
+  client.publish("SW/date/day", saved_day);
+  client.publish("SW/time/hour", saved_hou);
+  client.publish("SW/time/minute", saved_min);
+  client.publish("SW/time/second", saved_sec);        
+}
+
+void setup(){
+  Serial.begin(9600);
+  dht.begin();
+  ss.begin(GPSBaud);
+  EEPROM.begin(512);
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  pinMode(A0, INPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  while (!Serial){}
+  Serial.println("Device booted up");
+  Serial.println("================");
+}
+
+void loop(){
+  if (WiFi.status() != WL_CONNECTED && no_wifi == 0){
+    setup_wifi();
+  }
+  if (!client.connected() && no_wifi == 0){
+    Serial.println("Reconnecting with MQTT");
+    reconnect();
+  }
+  if (client.connected() && connection_set == 1){
+    send_stored_data();
+    connection_set = 0;
+  }
+  digitalWrite(LED_BUILTIN, HIGH);
+  h = dht.readHumidity();
+  t = dht.readTemperature();
+  if (isnan(h) || isnan(t)){
+    Serial.println("Failed to read from DHT sensor");
+    timeSinceLastRead = 0;
+    return;
+  }
+
+  Serial.print("Humidity: ");
+  Serial.print(h);
+  Serial.print(" %\t");
+  Serial.print("Temperature: ");
+  Serial.print(t);
+  Serial.println(" *C ");
+  Serial.print("From the light sensor: ");
+  Serial.println(voltage);
+
+  timeSinceLastRead=0;
+  
+  snprintf(msg_temperature, 50, "%f", t);
+  snprintf(msg_humidity, 50, "%f", h);
+  snprintf(msg_light, 50, "%f", voltage);
+  snprintf(msg_location_lat, 50, "%f", loc_lat);
+  snprintf(msg_location_lng, 50, "%f", loc_lng);
+  snprintf(msg_date_yea, 50, "%f", date_yea);
+  snprintf(msg_date_mon, 50, "%f", date_mon);
+  snprintf(msg_date_day, 50, "%f", date_day);
+  snprintf(msg_time_hou, 50, "%f", time_hou);
+  snprintf(msg_time_min, 50, "%f", time_min);
+  snprintf(msg_time_sec, 50, "%f", time_sec);
+  
+  client.publish("SW/temp", msg_temperature);
+  client.publish("SW/humi", msg_humidity);
+  client.publish("SW/ligh", msg_light);
+  client.publish("SW/location/lat", msg_location_lat); 
+  client.publish("SW/location/lng", msg_location_lng); 
+  client.publish("SW/date/year", msg_date_yea);
+  client.publish("SW/date/month", msg_date_mon);
+  client.publish("SW/date/day", msg_date_day);
+  client.publish("SW/time/hour", msg_time_hou);
+  client.publish("SW/time/minute", msg_time_min);
+  client.publish("SW/time/second", msg_time_sec);
+  
+  while (ss.available() > 0)
+    if (gps.encode(ss.read()))
+      displayInfo();
+
+  if (millis() > 5000 && gps.charsProcessed() < 10)
+  {
+    Serial.println(F("No GPS detected: check wiring."));
+    //while(true);
+  }
+  if (connect_timer == 50){
+    Serial.println("===Saving data in the offline mode===");
+    if (save_in == 0){
+      EEPROM.write(save_in, h);
+      save_in += 1;
+    } if (save_in == 1){
+      EEPROM.write(save_in, t);
+      save_in += 1;
+    } if (save_in == 2){
+      EEPROM.write(save_in, voltage);
+      save_in += 1;
+    }  if (save_in == 3){
+      EEPROM.write(save_in, loc_lat);
+      save_in += 1;
+    } if (save_in == 4){
+      EEPROM.write(save_in, loc_lng);
+      save_in += 1;
+    } if (save_in == 5){
+      EEPROM.write(save_in, date_yea);
+      save_in += 1;
+    } if (save_in == 6){
+      EEPROM.write(save_in, date_mon);
+      save_in += 1;
+    } if (save_in == 7){
+      EEPROM.write(save_in, date_day);
+      save_in += 1;
+    } if (save_in == 8){
+      EEPROM.write(save_in, time_hou);
+      save_in += 1;
+    } if (save_in == 9){
+      EEPROM.write(save_in, time_min);
+      save_in += 1;
+    } if (save_in == 10){
+      EEPROM.write(save_in, time_sec);
+    }
+      save_in = 0;
+      for (int i = 0; i <= 10; i++){
+        int saved_value = EEPROM.read(i);
+        Serial.print(i);
+        Serial.print("\t");
+        Serial.print(saved_value, DEC);
+        Serial.println();
+    }  
+      EEPROM.commit();
+      EEPROM.end();
+      connect_timer = 0; 
+  }
+  if (voltage <= 1.5){
+    Serial.println("Going to sleep");
+    delay(1000);
+    ESP.deepSleep(30e6);
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(3000);
+    Serial.println("Waking up");
+    delay(2000);
+    Serial.println("Morning");
+  }
+  no_wifi = 0;
+  mqtt_counter = 0;
+  delay(5000);
+  client.loop();
+}

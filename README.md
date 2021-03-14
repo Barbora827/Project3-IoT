@@ -10,3 +10,5 @@ the prototype "wakes up" and starts monitoring the conditions. At the same time,
 measured by the prototype, its location on the map, as well as the location of all other active prototypes, see how the conditions change overtime, the database of latest entries etc.
 
 The project also features a login page and SSL certificate for security. 
+
+My part on the project was developing the website for displaying all our data as well as implement sleep mode for ESP8266 and conditions measuring.

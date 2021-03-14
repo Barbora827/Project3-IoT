@@ -11,4 +11,4 @@ measured by the prototype, its location on the map, as well as the location of a
 
 The project also features a login page and SSL certificate for security. 
 
-My part on the project was developing the website for displaying all our data as well as implement sleep mode for ESP8266 and conditions measuring.
+My part on the project was developing the website for displaying all our data, as well as implementing sleep mode for ESP8266 and conditions measuring.
